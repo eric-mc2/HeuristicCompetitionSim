@@ -42,21 +42,23 @@ simulate <- function(sim.params) {
       ballots <- CastBallots(exp.util)
       vote.shares <- factor(ballots, levels=seq(sim.params$n.candidates))
       election.winner <- CountBallots(ballots, sim.params$n.candidates)
-      results$candpop[t,] <- tabulate(vote.shares, sim.params$n.candidates)
-      results$elected[t] <- election.winner
       # TODO: Option for no elections where agents only affect by own choice.
     }
     #### Evaluate mental model ####
-    agent.complexity <- ComputeComplexity(agent_h)
-  #   agent_r <- fit(cand_y, y_expected, winner, ballots, ego, n_dims) # n_agents by 1
-  #   agent_p <- significance(agent_h, agent_b) # n_agents by 1
-  #   agent_m <- desirability(agent_p, agent_r, agent_k, aversion) # n_agents by 1
-  #   ### Update non-election graphs ###
-  #   dims[t,] <- rowSums(agent_h)
-  #   fits[t,] <- tabulate(cut(agent_r, fit_bins), length(fit_bins))
-  #   simplicity[t,] <- tabulate(agent_k, n_dims)
-  #   utility[t,] <- tabulate(cut(y_expected[winner,]/n_dims, util_bins), length(util_bins))
-  #   ### Evaluate neighbor's models ###
+    agent.state$cplx <- ComputeComplexity(agent.state$heuristic)
+    agent.state$fit <- ComputeFit(candiate.state$utility, exp.util,
+                          election.winner, ballots, sim.params)
+    agent.state$sig <- ComputeSignificance(agent.state, org.state, sim.params)
+    agent.state$desr <- ComputeDesirability(agent.state, sim.params)
+    #### Update Results ####
+    results$candpop[t,] <- tabulate(vote.shares, sim.params$n.candidates)
+    results$elected[t] <- election.winner
+    results$issuepop[t,] < ComputeIssuePop(agent.state, org.state, sim.params)
+    results$orgpop[t,] <- tabuate(agent.stats$heuristic, sim.params$n.heuristics)
+    results$modelfit[t,] <- tabulate(cut(agent.state$fit, sim.params$nbins), sim.params$nbins)
+    results$modelcplx[t,] <- tabulate(agent.state$cplx, sim.params$n.dims)
+    results$modelutil[t,] <- ComputePopExpUtil(exp.util, winner, sim.params)
+    #### Evaluate neighbor's models ####
   #   tmp_h <- encounter_neighbors(agent_h, n_agents)
   #   tmp_y <- model(agent_b, tmp_h, cand_x)
   #   tmp_k <- complexity(tmp_h)
@@ -69,11 +71,6 @@ simulate <- function(sim.params) {
   #   will_update <- tmp_m * (1+delta) > agent_m * (1+gamma*stubbornness)
   #   stubbornness <- ossify(stubbornness, will_update, n_agents)
   #   agent_h[,will_update] <- tmp_h[,will_update]
-  #   # Transcribe dimension combinations into orgs
-  #   orgs <- heuristic2org(agent_h, n_dims)
-  #   org[,t] <- orgs
-  #   orgsvec <- tabulate(orgs, 2^n_dims)
-  #   orgdens[,t] <- orgsvec[initial_org_indexes]
   }
   return(results)
 }
