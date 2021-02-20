@@ -1,16 +1,22 @@
 Package: HeuristicCompetitionSim
-Title: What the Package Does (One Line, Title Case)
+Title: Agent-Based Simulation for Competitive Landscape of Political Beliefs
 Version: 0.0.0.9000
 Authors@R: 
-    person(given = "First",
-           family = "Last",
+    person(given = "Eric",
+           family = "Chandler",
            role = c("aut", "cre"),
-           email = "first.last@example.com",
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to
-    pick a license
+           email = "echandler@uchicago.edu")
+    person(given = "Michael",
+           family = "Cowan",
+           role = c("aut", "cre"),
+           email = "mcowan12@umd.edu")
+Description: This this code was developed to explore the implications of a theory of decision making developed by Michael Cowan. Michael is researching people's motivations for participating in political movements, especially insurgencies, and for adopting specific political ideologies. The premise is that political organizations compete for membership by creating narratives that are contrastingly simple and truthful. This package exposes one function, 'simulate', which runs the ABM.
+License: `use_mit_license()`
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
+Imports:
+  Matrix,
+  assertthat,
+  gtools
