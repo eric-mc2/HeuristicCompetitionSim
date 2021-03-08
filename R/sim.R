@@ -16,7 +16,7 @@
 #'    org.aversion: Political org aversion to complexity (0, 5)[1]
 #' @return A list of many results matrixes
 #' @export
-simulate <- function(sim.params) {
+sim <- function(sim.params) {
 
   sim.params <- FillDefaultSimParams(sim.params)
   ValidateSimParams(sim.params)
@@ -34,30 +34,31 @@ simulate <- function(sim.params) {
 
   #### Simulation Main Loop ####
 
-  for (t in 0:sim.params$n.timesteps) {
+  for (t in 1:sim.params$n.timesteps) {
     #### Update Mental Model ####
-    exp.util <- ComputeUtility(agent.state, candidate.state, org.state)
-    if (election_cycle > 0 && mod(t, election_cycle) == 0) {
+    exp.util <- ComputeUtility(agent.state, candidate.state$stances, org.state)
+    # if (sim.params$election.cycle > 0 && (t %% sim.params$election.cycle) == 0) {
       #### Election ####
       ballots <- CastBallots(exp.util)
       vote.shares <- factor(ballots, levels=seq(sim.params$n.candidates))
       election.winner <- CountBallots(ballots, sim.params$n.candidates)
       # TODO: Option for no elections where agents only affect by own choice.
-    }
+    # }
     #### Evaluate mental model ####
-    agent.state$cplx <- ComputeComplexity(agent.state$heuristic)
-    agent.state$fit <- ComputeFit(candiate.state$utility, exp.util,
+    agent.state$cplx <- ComputeComplexity(agent.state, org.state)
+    agent.state$fit <- ComputeFit(candidate.state$utility, exp.util,
                           election.winner, ballots, sim.params)
     agent.state$sig <- ComputeSignificance(agent.state, org.state, sim.params)
     agent.state$desr <- ComputeDesirability(agent.state, sim.params)
     #### Update Results ####
-    results$candpop[t,] <- tabulate(vote.shares, sim.params$n.candidates)
-    results$elected[t] <- election.winner
-    results$issuepop[t,] < ComputeIssuePop(agent.state, org.state, sim.params)
-    results$orgpop[t,] <- tabuate(agent.stats$heuristic, sim.params$n.heuristics)
-    results$modelfit[t,] <- tabulate(cut(agent.state$fit, sim.params$nbins), sim.params$nbins)
-    results$modelcplx[t,] <- tabulate(agent.state$cplx, sim.params$n.dims)
-    results$modelutil[t,] <- ComputePopExpUtil(exp.util, winner, sim.params)
+    #XXX Is growing df costly? Allocate up front?
+    results$candpop <- rbind(results$candpop, tabulate(vote.shares, sim.params$n.candidates))
+    results$elected <- cbind(results$elected, election.winner)
+    results$issuepop < rbind(results$issuepop, ComputeIssuePop(agent.state, org.state, sim.params))
+    results$orgpop <- rbind(results$orgpop, tabulate(agent.state$heuristic, sim.params$n.heuristics))
+    results$modelfit <- rbind(results$modelfit, tabulate(cut(agent.state$fit, sim.params$nbins), sim.params$nbins))
+    results$modelcplx <- rbind(results$modelcplx, tabulate(agent.state$cplx, sim.params$n.dims))
+    results$modelutil <- rbind(results$modelutil, ComputePopExpUtil(exp.util, election.winner, sim.params))
     #### Evaluate neighbor's models ####
   #   tmp_h <- encounter_neighbors(agent_h, n_agents)
   #   tmp_y <- model(agent_b, tmp_h, cand_x)

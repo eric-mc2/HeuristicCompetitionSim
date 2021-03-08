@@ -3,9 +3,6 @@
 #' @keywords internal
 #' @noRd
 
-library("assertthat")
-library("gtools")
-
 #### Initialization Functions ####
 
 FillDefaultSimParams <- function(params) {
@@ -18,7 +15,7 @@ FillDefaultSimParams <- function(params) {
   if (!("n.agents" %in% names(params))) {params$n.agents <- 200}
   if (!("n.heuristics" %in% names(params))) {params$n.heuristics <- 32}
   if (!("n.timesteps" %in% names(params))) {params$n.timesteps <- 250}
-  if (!("election.cycle" %in% names(params))) {params$election.cycle <- 0}
+  if (!("election.cycle" %in% names(params))) {params$election.cycle <- 1}
   if (!("conservatism" %in% names(params))) {params$conservatism <- 0}
   if (!("ego" %in% names(params))) {params$ego <- 1}
   if (!("aversion" %in% names(params))) {params$aversion <- 1}
@@ -54,7 +51,7 @@ AssignPrefs <- function(sim.params) {
   #   sim.params: List of global simulation configuration options
   # Returns:
   #   Matrix of agents' private preferences broken down by issue
-  betasvec <- rnorm(sim.params$n.agents*sim.params$n.dims, .5, .2);
+  betasvec <- stats::rnorm(sim.params$n.agents*sim.params$n.dims, .5, .2);
   betasvec[betasvec < 0] = 0;
   betasvec[betasvec > 1] = 1;
   betasmat <- matrix(betasvec, sim.params$n.agents, sim.params$n.dims)
@@ -72,7 +69,7 @@ GenerateHeuristics <- function(sim.params) {
   # Returns:
   #   Data frame of heuristic weights
   alphas <- rep(sim.params$org.aversion, times=sim.params$n.dims)
-  df <- as.data.frame(rdirichlet(sim.params$n.heuristics, alphas))
+  df <- as.data.frame(gtools::rdirichlet(sim.params$n.heuristics, alphas))
   colnames(df) <- paste("d", 1:sim.params$n.dims, sep="")
   rownames(df) <- paste("h", 1:sim.params$n.heuristics, sep="")
   return(df)
@@ -95,7 +92,7 @@ GenerateStances <- function(sim.params) {
   #   sim.params: List of global simulation configuration options
   # Returns:
   #   Dataframe (n.candidates x n.dims) of values between 0 and 1
-  stancesvec <- runif(sim.params$n.candidates*sim.params$n.dims)
+  stancesvec <- stats::runif(sim.params$n.candidates*sim.params$n.dims)
   stancesdf <- as.data.frame(matrix(stancesvec, sim.params$n.candidates, sim.params$n.dims))
   colnames(stancesdf) <- paste("d", 1:sim.params$n.dims, sep="")
   rownames(stancesdf) <- paste("c", 1:sim.params$n.candidates, sep="")
@@ -124,7 +121,7 @@ AllocateResultsDF <- function(sim.params) {
 
 #### Heuristic Evaluation Functions ####
 
-ComputeComplexity <- function(agent.heuristics) {
+ComputeComplexity <- function(agent.state, org.state) {
   # Counts the dimensions actively employed in a mental model
   #
   # When model dimensions were binary, we simply counted the nonzero dims.
@@ -134,10 +131,12 @@ ComputeComplexity <- function(agent.heuristics) {
   # when weights are split evenly across dimensions.
   #
   # Args:
-  #   agent.heuristics: Matrix of each agents' current mental model
+  #   agent.state: Data frame of agent preferences and mental model
+  #   agent.state: Data frame of agent preferences and mental model
   # Returns:
   #   Vector of complexity score of each heuristic
-  return(rowsum(agent.heuristics * agent.heuristics))
+  org.cplx <- rowSums(org.state$heuristic *org.state$heuristic)
+  return(org.cplx[agent.state$heuristic])
 }
 
 ComputeFit <- function(actual.util, exp.util, winner, ballots, sim.params) {
@@ -151,7 +150,7 @@ ComputeFit <- function(actual.util, exp.util, winner, ballots, sim.params) {
   #   sim.params: List of global simulation configuration options
   # Returns:
   #   Vector of each agents' current mental model's fit
-  diff.social <- actual.util[winner] - exp.util[,winner]
+  diff.social <- actual.util[winner] - ExtractExpUtil(exp.util, winner, sim.params)
   diff.ego <- actual.util[ballots] - ExtractExpUtil(exp.util, ballots, sim.params)
   diff <- diff.ego * sim.params$ego + diff.social * (1-sim.params$ego)
   return(1 - abs(diff)/sim.params$n.dims)
@@ -173,6 +172,8 @@ ComputeSignificance <- function(agent.state, org.state, sim.params) {
   #
   # Args:
   #   agent.state: Dataframe of preferences and heuristics
+  #   org.state: Dataframe of heuristic definitions
+  #   sim.params: List of global simulation configuration options
   # Returns:
   #   Vector of significance values
   ones <- rep(1, sim.params$n.candidate * sim.params$n.dims)
@@ -206,6 +207,18 @@ ComputeUtility <- function(agent.state, candidate.stances, org.state) {
   return(data.matrix(agent.state$prefs * full.heuristic) %*% t(candidate.stances))
 }
 
+ExtractExpUtil <- function(exp.util, candidates, sim.params) {
+  # Returns the expected utility of a list of candidates
+  #
+  # Args:
+  #   exp.util: Matrix of agents' expected utility per candidate
+  #   candidates: Vector or single integer candidate id (in order of agents)
+  #   sim.params: List of global simulation configuration options
+  # Returns:
+  #   Vector of every agents' expected utility of the indicated candidate
+  return(exp.util[cbind(seq(sim.params$n.agents),candidates)])
+}
+
 #### Results Aggregation ####
 
 ComputeIssuePop <- function(agent.state, org.state, sim.params) {
@@ -219,6 +232,7 @@ ComputeIssuePop <- function(agent.state, org.state, sim.params) {
   #   Vector of total weight put to every issue
   org.pop <- tabulate(agent.state$heuristic, sim.params$n.heuristics)
   org.pop <- org.pop / sim.params$n.heuristics
+  # XXX: This cast might be expensive
   return(t(org.pop) %*% data.matrix(org.state$heuristic))
 }
 
@@ -235,20 +249,6 @@ ComputePopExpUtil <- function(exp.util, winner, sim.params) {
   exp.util.histo <- cut(exp.util.vec/sim.params$n.dims, sim.params$nbins)
   return(tabulate(exp.util.histo, sim.params$nbins))
 }
-
-ExtractExpUtil < function(exp.util, candidates, sim.params) {
-  # Returns the expected utility of a list of candidates
-  #
-  # Args:
-  #   exp.util: Matrix of agents' expected utility per candidate
-  #   candidates: Vector or single integer candidate id (in order of agents)
-  #   sim.params: List of global simulation configuration options
-  # Returns:
-  #   Vector of every agents' expected utility of the indicated candidate
-  return(exp.util[cbind(seq(sim.params$n.agents),ballots)])
-}
-
-
 
 #### Agent Behaviors ####
 
@@ -268,7 +268,7 @@ CastBallots <- function(expected.util) {
   #     utility with respect to every candidate
   # Returns:
   #   Integer vector of who every agent voted for
-  return(max.col(t(expected.util)))
+  return(max.col(expected.util))
 }
 
 CountBallots <- function(ballots, n.candidates) {
@@ -279,7 +279,7 @@ CountBallots <- function(ballots, n.candidates) {
   #   n.candidates: Total number of candidates in the election
   # Returns:
   #   Integer identifier of the winning candidate
-  return(as.integer(levels(ballots)[which.max(tabulate(ballots, n.candidates))]))
+  return(which.max(tabulate(ballots, n.candidates)))
 }
 
 EntrenchViews <- function(rate, will.update, n.agents) {
